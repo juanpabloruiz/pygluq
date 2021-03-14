@@ -1,22 +1,27 @@
+from __future__ import print_function
 # yet incomplete translation of: https://github.com/alexanderk23/gluqlo
 from datetime import datetime
-import pygame
 import math
 import os
+import sys
 
+import pygame
 
 try:
     _dir = os.path.dirname(os.path.abspath(__file__))
 except:  ## __file__ doesn't exists in py2exe context
-    __file__=os.getcwd()
-    _dir = os.path.abspath(__file__)
+    _dir = os.path.dirname(os.path.abspath(sys.executable))
 
 
-ANIMATE = True
 FONT_COLOR = 0xb7, 0xb7, 0xb7
 BACKGROUND_COLOR = 0x0f, 0x0f, 0x0f
 
 SQRT2 = math.sqrt(2)
+
+TARGET_FPS = 60
+DEBUG = False
+ANIMATE = True
+DURATION = 200
 
 
 def fill_surface(surf, coords4, r, color):
@@ -67,7 +72,27 @@ def fill_surface(surf, coords4, r, color):
 
 
 class Gluqlo:
-    def __init__(self):
+    def show_globals(self):
+        print('TARGET_FPS: %d' % TARGET_FPS)
+        print('DEBUG: %r' % DEBUG)
+        print('DURATION: %d' % DURATION)
+    
+    def check_unsupported_option(self, option):
+        if option in sys.argv:
+            print("unsupported option:", option)
+            sys.exit(-1)
+
+    def check_args(self):
+        attrs = pygame.DOUBLEBUF
+        if '/s' in sys.argv:
+            attrs = attrs|pygame.FULLSCREEN
+        if '/f' in sys.argv:
+            attrs = attrs & (~pygame.FULLSCREEN)
+        self.check_unsupported_option('/c')
+        self.check_unsupported_option('/p')
+        return attrs
+
+    def pygame_init(self, attrs):
         pygame.init()
         try:
             pygame.display.init()
@@ -75,16 +100,21 @@ class Gluqlo:
             # required for xp..
             os.environ['SDL_VIDEODRIVER']='windib'
             pygame.display.init()
-
+ 
         try:
-            self.screen = pygame.display.set_mode((0,0), flags=pygame.HWSURFACE|pygame.DOUBLEBUF|pygame.FULLSCREEN)
+            self.screen = pygame.display.set_mode((0,0), flags=pygame.HWSURFACE|attrs)
         except:
-            self.screen = pygame.display.set_mode((0,0), pygame.DOUBLEBUF|pygame.FULLSCREEN)
+            self.screen = pygame.display.set_mode((0,0), attrs)
         self.width, self.height = self.screen.get_width(), self.screen.get_height()
         self.clock = pygame.time.Clock()
 
         font_filename = os.path.join(_dir, 'gluqlo.ttf')
         self.font_time = pygame.font.Font(font_filename, int(self.height / 1.68))
+
+    def __init__(self):
+        attrs = self.check_args()
+        self.show_globals()
+        self.pygame_init(attrs)
 
         # config
         self.past_h = self.past_m = 99
@@ -106,6 +136,11 @@ class Gluqlo:
         self.hourBackground = list(map(int, [hourBackground_x, hourBackground_y, hourBackground_w, hourBackground_h]))
         self.minBackground = list(map(int, 
                 [self.hourBackground[0]+(self.spacing+(0.6*self.height)), self.hourBackground[1], self.rectsize, self.rectsize ]))
+
+        # animation parameters
+        self.start = self.end = None
+        # animation frame counter and max
+        self.cnt = self.maxcnt = 0
 
 
     def blit_digits(self, surf, bg_rect, spc, digits, color):
@@ -174,12 +209,11 @@ class Gluqlo:
         surf.set_clip(None)
 
         # # // draw divider
-        # yet not working well..
-        rect2 = list(map(int, [bg_rect[0], bg_rect[1]+(bg_rect[3]-(surf.get_height() * 0.005))/2, bg_rect[2], surf.get_height() * 0.005]))
-        fill_surface(surf, rect2, self.radius, BACKGROUND_COLOR)
-        rect2[1] += rect2[3]
-        rect2[3] = 1
-        fill_surface(surf, rect2, self.radius, (0x1a,0x1a,0x1a, 0xff))
+        # rect2 = list(map(int, [bg_rect[0], bg_rect[1]+(bg_rect[3]-(surf.get_height() * 0.005))/2, bg_rect[2], surf.get_height() * 0.005]))
+        # fill_surface(surf, rect2, self.radius, BACKGROUND_COLOR)
+        # rect2[1] += rect2[3]
+        # rect2[3] = 1
+        # fill_surface(surf, rect2, self.radius, (0x1a,0x1a,0x1a, 0xff))
 
 
     def render_clock(self, bg, maxsteps, steps, hour, minute):
@@ -195,43 +229,93 @@ class Gluqlo:
             buffer2 = '%02d'%self.past_m
             self.render_digits(self.screen, self.minBackground, bg, buffer, buffer2, maxsteps, steps)
             pygame.display.flip()
-
+            
         if steps == maxsteps-1:
             self.past_h = hour
             self.past_m = minute
 
 
-    def render_animate(self, bg):
-        dt = datetime.now()
-        if not ANIMATE:
-            return self.render_clock(bg, 20, 19, dt.hour, dt.minute)
+    def render_animate(self, bg, a, b):
+        current = pygame.time.get_ticks()
 
-        duration = 200
-        start = pygame.time.get_ticks()
-        end = start + duration
-        done = False
-        while not done:
-            current = pygame.time.get_ticks()
-            if current>=end:
-                done = True
-                current = end
-            frame = 99 * (current-start) / (end-start)
-            self.render_clock(bg, 100, frame, dt.hour, dt.minute)
+        frame = 99
+        if self.start is None:
+            if b!=self.past_m:
+                # start animation
+                self.start = current
+                self.end = current+DURATION
+
+        if not(self.start is None):
+            if current>self.end:
+                # current = self.end  # unnecessary
+                self.end = self.start = None
+            else:
+                frame = (99.0 * (current-self.start)) / DURATION  # (self.end-self.start)
+
+        common_frame = frame==99
+        if not common_frame:
+            self.cnt+=1
+        else:
+            self.maxcnt = self.cnt if self.cnt>self.maxcnt else self.maxcnt
+            self.cnt = 0
+        #print('frame:' if common_frame else "*** %d"%frame, "---",  self.start, current, self.end, "---", b, self.past_m)
+        self.render_clock(bg, 100, frame, a, b)
+
 
     def main(self):
+        global ANIMATE
         done = False
         self.screen.fill((0,0,0))
         bg_rect = 0, 0, self.rectsize, self.rectsize
-        bg = pygame.Surface((int(self.rectsize), int(self.rectsize)), pygame.HWSURFACE|pygame.SRCALPHA) #, 32)
+        bg = pygame.Surface((int(self.rectsize), int(self.rectsize)), pygame.HWSURFACE|pygame.SRCALPHA)
         fill_surface(bg, bg_rect, self.radius, BACKGROUND_COLOR)
 
+        self.clock.tick(TARGET_FPS)
         while not done:
-            self.render_animate(bg)
+            self.clock.tick(TARGET_FPS)
+            dt = datetime.now()
+            a, b = (dt.minute, dt.second) if DEBUG else (dt.hour, dt.minute)
+            if ANIMATE:
+                self.render_animate(bg, a, b)
+            else:
+                self.render_clock(bg, 20, 19, a, b)
             for event in pygame.event.get():
                 done = event.type in (pygame.KEYDOWN, pygame.K_ESCAPE, pygame.QUIT)
-            self.clock.tick(30)
 
+def get_bool(name, default):
+    QUOTES = '"', "'"
+    if name in os.environ:
+        value = os.environ.get(name, str(default)).lower()
+        if value[0] in QUOTES:
+            value = value[1:] 
+        if value[-1] in QUOTES:
+            value = value[:-1] 
+        return value in ('y', 'yes', 's', 'si','true', 't', '1')
+    return default
+
+def get_int(name, default=None):
+    if name in os.environ:
+        value = os.environ.get(name, str(default))
+        try:
+            return int(value)
+        except:
+            print("Cannot interpret:", value, "as integer!")
+    return default
+    
 
 if __name__=="__main__":
+    _TARGET_FPS, _FPS = 'TARGET_FPS', 'FPS'
+    _DEBUG = 'DEBUG'
+    _DURATION = 'DURATION'
+    _ANIMATE = 'ANIMATE'
+
+    TARGET_FPS = get_int(_TARGET_FPS, get_int(_FPS, default=TARGET_FPS))
+    DURATION = get_int(_DURATION, default=DURATION)
+    DEBUG = get_bool(_DEBUG, DEBUG)
+    ANIMATE = get_bool(_ANIMATE, ANIMATE)
+
     ss = Gluqlo()
-    ss.main()
+    try:
+        ss.main()
+    finally:
+        if DEBUG: print("total: ", ss.maxcnt)
