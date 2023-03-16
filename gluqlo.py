@@ -102,14 +102,14 @@ class Gluqlo:
             pygame.display.init()
  
         try:
-            self.screen = pygame.display.set_mode((0,0), flags=pygame.HWSURFACE|attrs)
+            self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
         except:
             self.screen = pygame.display.set_mode((0,0), attrs)
         self.width, self.height = self.screen.get_width(), self.screen.get_height()
         self.clock = pygame.time.Clock()
 
         font_filename = os.path.join(_dir, 'gluqlo.ttf')
-        self.font_time = pygame.font.Font(font_filename, int(self.height / 1.68))
+        self.font_time = pygame.font.Font(font_filename, int(self.height / 1.3))
 
     def __init__(self):
         attrs = self.check_args()
@@ -122,16 +122,16 @@ class Gluqlo:
         self.leadingZero = True
 
         # calculate
-        self.rectsize = self.height * 0.6
-        self.spacing = self.width * 0.031
+        self.rectsize = self.height * 0.8
+        self.spacing = self.width * 0.15
         self.radius = self.height * 0.05714
-        self.jitter_width = self.jitter_height = 1
+        self.jitter_width = self.jitter_height = 5
         # if display_scale_factor != 1:
         # 	self.jitter_width  = (screen->w - width) * 0.5;
         # 	self.jitter_height = (screen->h - height) * 0.5;
 
-        hourBackground_x = 0.5 * (self.width - (0.031 * self.width) - (1.2 * self.height)) + self.jitter_width
-        hourBackground_y = 0.2 * self.height + self.jitter_height
+        hourBackground_x = 0.1 * (self.width - (0.031 * self.width) - (1.2 * self.height)) + self.jitter_width
+        hourBackground_y = 0.1 * self.height + self.jitter_height
         hourBackground_w = hourBackground_h = self.rectsize
         self.hourBackground = list(map(int, [hourBackground_x, hourBackground_y, hourBackground_w, hourBackground_h]))
         self.minBackground = list(map(int, 
